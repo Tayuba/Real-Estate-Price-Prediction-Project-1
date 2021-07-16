@@ -75,3 +75,31 @@ def sqft_average(x):
 houses_data["total_sqft"] = houses_data["total_sqft"].apply(sqft_average)
 print(houses_data)
 
+"""Now I will do Feature Engineering on the data"""
+# It important to know price pre sqft, hence i will create a column for that
+houses_data["price_per_sqft"] = houses_data["price"]*100000/houses_data["total_sqft"]
+print(houses_data, "\n")
+
+"""I want to convert my location column using get dummies from pandas, first i have to check the number of locations
+in my data"""
+print(houses_data.location.unique())
+print(len(houses_data.location.unique()))
+"""['Electronic City Phase II' 'Chikka Tirupathi' 'Uttarahalli' ...
+ '12th cross srinivas nagar banshankari 3rd stage' 'Havanur extension'
+ 'Abshot Layout'] these are the unique location and the count is 1304, the count is really a big number therefore i have 
+ to reduce the location"""
+
+# Removing space in front and behind the various locations
+houses_data.location = houses_data.location.apply(lambda x: x.strip())
+
+# Now i will group all the location into a variable
+locations_stat = houses_data.groupby("location")["location"].agg("count").sort_values(ascending=False)
+print(locations_stat)
+
+"""I will put all locations with row less or equal to 10 into a category call other locations"""
+location_less_than_10 = locations_stat[locations_stat<=10]
+print(location_less_than_10)
+
+# Creating other category
+houses_data.location = houses_data.location.apply(lambda x: "other" if x in location_less_than_10 else x)
+print(houses_data)
