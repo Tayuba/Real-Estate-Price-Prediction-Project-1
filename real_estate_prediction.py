@@ -1,6 +1,15 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import ShuffleSplit
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import Lasso
+from sklearn.tree import DecisionTreeRegressor
+import pickle
+import json
 
 # Load the CSV file into pandas DataFrma
 df = pd.read_csv("Bengaluru_House_Data.csv")
@@ -192,3 +201,119 @@ print(houses_data)
 """Now my data is ready for training, but i will drop size and price_per_sqft"""
 houses_data = houses_data.drop(["size", "price_per_sqft"], axis=1)
 print(houses_data)
+
+"""From my data, i have to convert all my non numbers to numbers using get dummies from python"""
+#Converting my locations to numbers
+loc_number = pd.get_dummies(houses_data.location)
+print(loc_number)
+
+# I will concatenate loc_number to my house data, with "other" dropped
+houses_data = pd.concat([houses_data, loc_number.drop("other", axis=1)], axis=1)
+print(houses_data)
+
+# I will drop the location column now
+houses_data = houses_data.drop("location", axis=1)
+print(houses_data)
+
+# Creating x variables(In-dependable variables) and y variable(dependable variable)
+x = houses_data.drop("price", axis=1)
+y = houses_data.price
+print(x)
+print(y)
+
+# Train my data set
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=10)
+
+# Use linear regression
+Reg = LinearRegression()
+Reg.fit(x_train, y_train)
+
+# Check the score of the model
+Reg_score = Reg.score(x_test, y_test)
+print(Reg_score)
+
+# Using KFOLD cross validation to get the best score
+cross_val = ShuffleSplit(n_splits=5, test_size=0.2, random_state=0)
+k_fold_score = cross_val_score(LinearRegression(), x, y, cv=cross_val)
+print(k_fold_score)
+"""my scores are: [0.82430186 0.77166234 0.85089567 0.80837764 0.83653286], i still need to search for the best model
+therefore i will use GridSearchCV to find best model"""
+
+# I will write a function to give me the best algorithm, hyper parameter tuning
+def find_best_model_with_gridsearchcv(x, y):
+    model_param = {
+        "linear_regression": {
+            "model": LinearRegression(),
+            "params": {
+                "normalize": [True, False],
+
+            }
+        },
+
+        "lasso": {
+            "model": Lasso(),
+            "params": {
+                "alpha": [1, 2],
+                "selection": ["random", "cyclic"]
+
+                }
+
+            },
+        "decision_tree": {
+            "model": DecisionTreeRegressor(),
+            "params": {
+                "criterion": ["mse", "friedman_mse"],
+                "splitter": ["best", "random"]
+
+            }
+
+        }
+    }
+
+    """Iterate through json object, use the GridSearchCV to select the best score, model and parameterd"""
+    scores = []
+    cross_val = ShuffleSplit(n_splits=5, test_size=0.2, random_state=0)
+    for model_name, config in model_param.items():
+        grid_search = GridSearchCV(config["model"], config["params"], cv=cross_val, return_train_score=False)
+        grid_search.fit(x, y)
+        scores.append({
+            "model": model_name,
+            "best_score": grid_search.best_score_,
+            "best_params": grid_search.best_params_
+        })
+    # Convert the scores list into pandas DataFrame
+    return pd.DataFrame(scores)
+best_score = find_best_model_with_gridsearchcv(x, y)
+print(best_score)
+"""               model  best_score                                 best_params
+0  linear_regression    0.818354                         {'normalize': True}
+1              lasso    0.687429         {'alpha': 2, 'selection': 'random'}
+2      decision_tree    0.727739  {'criterion': 'mse', 'splitter': 'random'}
+It can be seen that my linear regression model gives me the best model, therefore i will use it"""
+
+"""Now, i will write a function to predict the price of a house base on location, sqft, bath, bhk"""
+# print(x.columns)
+def predict_price(location, sqft, bath, bhk):
+    x = houses_data.drop("price", axis=1)
+    loc_index = np.where(x.columns==location)[0][0]
+
+    x = np.zeros(len(x.columns))
+    x[0] = sqft
+    x[1] = bath
+    x[2] = bhk
+    if loc_index >= 0:
+        x[loc_index] = 1
+    return Reg.predict([x])[0]
+predicted_price = predict_price("Electronic City Phase II", 1000, 3,3)
+print(predicted_price)
+
+"""Now my model is ready to be exported to pickle file and the x columns into json file"""
+with open("home_prediction_model.pickle", "wb") as file:
+    pickle.dump(Reg, file)
+
+# Json file of my x columnx
+columns = {
+    "data_columns": [col.lower() for col in x.columns]
+}
+with open("columns.json", "w+") as file:
+    file.write(json.dumps(columns))
