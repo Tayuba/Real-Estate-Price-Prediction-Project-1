@@ -103,3 +103,92 @@ print(location_less_than_10)
 # Creating other category
 houses_data.location = houses_data.location.apply(lambda x: "other" if x in location_less_than_10 else x)
 print(houses_data)
+
+"""Removing Outlier"""
+# removing which have less 300 sqft
+houses_data = houses_data[~(houses_data.total_sqft/houses_data.BHK_BEDROOM<300)]
+print(houses_data)
+
+# Checking the statistics of price per sqft
+print(houses_data)
+
+# Create a function to filter the price per location, using mean and standard deviation
+def remove_outliers(dataframe):
+    filter_dataframe = pd.DataFrame()
+    for key, subdf in dataframe.groupby("location"):
+        means = np.mean(subdf.price_per_sqft)
+        stds = np.std(subdf.price_per_sqft)
+        reduced_df = subdf[(subdf.price_per_sqft>(means-stds)) & (subdf.price_per_sqft<=(means+stds))]
+        filter_dataframe = pd.concat([filter_dataframe, reduced_df], ignore_index=True)
+    return filter_dataframe
+# Apply the function to the house data
+houses_data = remove_outliers(houses_data)
+print(houses_data)
+
+"""In the data, it is seen that some houses with less number of rooms have high price than houses with more rooms, to 
+have a view of this, i will write a function to view this behaviour on scatter plot"""
+# Scatter plot function
+def scatter_plot(dataframe, location):
+    bhk2 = dataframe[(dataframe.location==location) & (dataframe.BHK_BEDROOM==2)]
+    bhk3 = dataframe[(dataframe.location == location) & (dataframe.BHK_BEDROOM == 3)]
+    plt.scatter(bhk2.total_sqft, bhk2.price, color="blue", label="2 BHK")
+    plt.scatter(bhk3.total_sqft, bhk3.price, color="green", marker="+", label="3 BHK")
+    plt.xlabel("Total Square Feet Area")
+    plt.ylabel("Price Per Square Feet")
+    plt.title(location)
+    plt.legend()
+    plt.show()
+scatter_plot(houses_data, "Hebbal")
+
+# Now remove bedrooms outliers
+def remove_bhk_outliers(dataframe):
+    exclude_indices = np.array([])
+    for location, location_df in dataframe.groupby("location"):
+        bhk_stats = {}
+        for bhk, bhk_df in location_df.groupby("BHK_BEDROOM"):
+            bhk_stats[bhk] = {
+                "mean": np.mean(bhk_df.price_per_sqft),
+                "std": np.std(bhk_df.price_per_sqft),
+                "count": bhk_df.shape[0]
+            }
+        for bhk, bhk_df in location_df.groupby("BHK_BEDROOM"):
+            stats = bhk_stats.get(bhk-1)
+            if stats and stats["count"] > 5:
+                exclude_indices = np.append(exclude_indices, bhk_df[bhk_df.price_per_sqft <(stats["mean"])].index.values)
+    return dataframe.drop(exclude_indices, axis="index")
+
+houses_data = remove_bhk_outliers(houses_data)
+print(houses_data)
+"""From this graph you can see that i have removed alot of outliers"""
+scatter_plot(houses_data, "Hebbal")
+
+"""NOw i will like to view the price per square feet area on histogram to see how many houses are in price per square 
+feet area"""
+plt.hist(houses_data.price_per_sqft, rwidth=0.5)
+plt.xlabel("Price Per Square Feet")
+plt.ylabel("Count")
+plt.show()
+"""It can be seen that i have majority of my data from 0 to 10000"""
+
+"""Now I will work on the bathrooms, first i will find out how many bathdrooms are in the houses, i will try to see houses
+with more than 10 bathrooms and see if it make sense compare to the number of rooms and square feet area"""
+print(houses_data[houses_data.bath > 10])
+
+"""Now i will remove all houses with bathrooms more than number of rooms"""
+# I will view relationship of bathrooms with houses on histogram
+plt.hist(houses_data.bath, rwidth=0.5)
+plt.xlabel("Number of Bathrooms")
+plt.ylabel("Count")
+plt.show()
+"""It can be seen that most of the houses have 2, 4, 6 bathrooms with few with more than 8, 10, 12 bathrooms.
+I will remove all houses with 2 more bathrooms than bedrooms"""
+# First have a look at these houses
+print(houses_data[houses_data.bath > houses_data.BHK_BEDROOM + 2])
+
+# Now, removing these outliers
+houses_data = houses_data[houses_data.bath < houses_data.BHK_BEDROOM + 2]
+print(houses_data)
+
+"""Now my data is ready for training, but i will drop size and price_per_sqft"""
+houses_data = houses_data.drop(["size", "price_per_sqft"], axis=1)
+print(houses_data)
